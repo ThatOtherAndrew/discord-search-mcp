@@ -15,27 +15,39 @@ mcp = FastMCP('discord-search-mcp')
 
 
 @mcp.tool()
-def get_guilds() -> str:
+def get_guilds() -> dict:
     """Get a list of all Discord guilds (servers) the bot is a member of."""
     if not client.is_ready():
-        return 'Error: Discord client is not ready. Please ensure the bot is connected.'
+        raise RuntimeError('Discord client is not ready. Please ensure the bot is connected.')
 
-    guilds = client.guilds
-
-    if not guilds:
-        return 'The bot is not a member of any guilds.'
-
-    guild_info = []
-    for guild in guilds:
-        guild_info.append(
-            f'• {guild.name} (ID: {guild.id})\n'
-            f'  Members: {guild.member_count}\n'
-            f'  Owner: {guild.owner_id}\n'
-            f'  Created: {guild.created_at.strftime("%Y-%m-%d")}'
-        )
-
-    result = f'Bot is in {len(guilds)} guild(s):\n\n' + '\n\n'.join(guild_info)
-    return result
+    return {'guilds': [
+        {
+            'id': str(guild.id),
+            'name': guild.name,
+            'description': guild.description,
+            'member_count': guild.member_count,
+            'members': [
+                {
+                    'id': str(member.id),
+                    'name': member.name,
+                    'global_name': member.global_name,
+                    'display_name': member.display_name,
+                }
+                for member in guild.members
+            ],
+            'channel_count': len(guild.channels),
+            'channels': [
+                {
+                    'id': str(channel.id),
+                    'name': channel.name,
+                    'type': str(channel.type),
+                    'topic': getattr(channel, 'topic', None),
+                }
+                for channel in guild.channels
+            ],
+        }
+        for guild in client.guilds
+    ]}
 
 
 @mcp.tool()
