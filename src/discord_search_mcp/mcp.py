@@ -15,10 +15,9 @@ mcp = FastMCP('discord-search-mcp')
 
 
 @mcp.tool()
-def get_guilds() -> dict:
-    """Get a list of all Discord guilds (servers) the bot is a member of."""
-    if not client.is_ready():
-        raise RuntimeError('Discord client is not ready. Please ensure the bot is connected.')
+def get_guild_info() -> dict:
+    """Get a list of all Discord guilds (servers) and the members and channels they contain."""
+    client.ensure_ready()
 
     return {'guilds': [
         {
@@ -52,12 +51,87 @@ def get_guilds() -> dict:
 
 @mcp.tool()
 async def search_guild(guild_id: str, content: str) -> dict:
+    client.ensure_ready()
+
     route = Route('GET', '/guilds/{guild_id}/messages/search', guild_id=guild_id)
     response = await client.http.request(route, params={
         'content': content,
     })
 
     return response
+
+
+@mcp.tool()
+async def get_channel_messages(
+    channel_id: str,
+    message_id: str | None = None,
+    direction: str = 'latest',
+    limit: int = 50
+) -> dict:
+    """Get messages from a Discord channel.
+
+    Args:
+        channel_id: The channel to fetch messages from
+        message_id: Reference message ID (required for 'around', 'before', 'after')
+        direction: Where to fetch messages - 'latest', 'around', 'before', or 'after'
+        limit: Number of messages to fetch (1-100, default 50)
+    """
+    client.ensure_ready()
+
+    channel = client.get_channel(int(channel_id))
+    if not channel:
+        raise ValueError(f'Channel {channel_id} not found')
+
+    limit = max(1, min(100, limit))
+
+    kwargs = {'limit': limit}
+    if direction == 'around' and message_id:
+        kwargs['around'] = discord.Object(id=int(message_id))
+    elif direction == 'before' and message_id:
+        kwargs['before'] = discord.Object(id=int(message_id))
+    elif direction == 'after' and message_id:
+        kwargs['after'] = discord.Object(id=int(message_id))
+    elif direction != 'latest':
+        raise ValueError(f"direction must be 'latest', 'around', 'before', or 'after'")
+
+    messages = [msg async for msg in channel.history(**kwargs)]
+
+    return {
+        'channel_id': channel_id,
+        'channel_name': channel.name,
+        'message_count': len(messages),
+        'messages': [
+            {
+                'id': str(msg.id),
+                'content': msg.content,
+                'author': {
+                    'id': str(msg.author.id),
+                    'name': msg.author.name,
+                    'display_name': msg.author.display_name,
+                },
+                'timestamp': msg.created_at.isoformat(),
+                'edited_timestamp': msg.edited_at.isoformat() if msg.edited_at else None,
+                'attachments': [
+                    {
+                        'id': str(att.id),
+                        'filename': att.filename,
+                        'url': att.url,
+                        'content_type': att.content_type,
+                    }
+                    for att in msg.attachments
+                ],
+                'embeds': len(msg.embeds),
+                'reactions': [
+                    {
+                        'emoji': str(reaction.emoji),
+                        'count': reaction.count,
+                    }
+                    for reaction in msg.reactions
+                ] if msg.reactions else [],
+            }
+            for msg in messages
+        ]
+    }
 
 
 async def run_server(token: str):
