@@ -61,11 +61,11 @@ async def search_guild(guild_id: str, content: str) -> dict:
 
 
 async def run_server(token: str):
-    print('Starting Discord MCP server...', flush=True)
+    print('Starting Discord MCP server...')
     await client.start(token)
 
     port = int(os.getenv('PORT', 8000))
-    print(f'Starting MCP server on http://127.0.0.1:{port}', flush=True)
+    print(f'Starting MCP server on http://127.0.0.1:{port}')
 
     config = uvicorn.Config(mcp.streamable_http_app(), host='127.0.0.1', port=port, log_level='debug')
     server = uvicorn.Server(config)
