@@ -1,3 +1,4 @@
+from discord.http import Route
 from discord_search_mcp.client import Client
 
 import asyncio
@@ -35,6 +36,18 @@ def get_guilds() -> str:
 
     result = f'Bot is in {len(guilds)} guild(s):\n\n' + '\n\n'.join(guild_info)
     return result
+
+
+@mcp.tool()
+async def search_guild(guild_id: str, content: str) -> dict:
+    response = await client.http.request(Route(
+        'GET',
+        '/guilds/{guild_id}/messages/search',
+        guild_id=guild_id,
+        content=content,
+    ))
+
+    return response
 
 
 async def run_server(token: str):
