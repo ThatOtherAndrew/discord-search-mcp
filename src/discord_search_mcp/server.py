@@ -61,14 +61,19 @@ def get_guilds() -> str:
     return result
 
 
-async def startup():
+app = mcp.streamable_http_app()
+
+
+async def run_server():
     print('Starting Discord MCP server...', flush=True)
     await bot.start()
-    print('Discord MCP server ready!', flush=True)
 
+    port = int(os.getenv('PORT', 8000))
+    print(f'Starting MCP server on http://127.0.0.1:{port}', flush=True)
 
-app = mcp.streamable_http_app()
-app.on_event('startup')(startup)
+    config = uvicorn.Config(app, host='127.0.0.1', port=port, log_level='debug')
+    server = uvicorn.Server(config)
+    await server.serve()
 
 
 def main():
@@ -76,10 +81,7 @@ def main():
         print('Error: DISCORD_TOKEN environment variable not set', file=sys.stderr)
         sys.exit(1)
 
-    port = int(os.getenv('PORT', 8000))
-    print(f'Starting MCP server on http://127.0.0.1:{port}', flush=True)
-
-    uvicorn.run(app, host='127.0.0.1', port=port, log_level='debug')
+    asyncio.run(run_server())
 
 
 if __name__ == '__main__':
