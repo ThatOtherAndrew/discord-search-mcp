@@ -52,12 +52,10 @@ def get_guilds() -> dict:
 
 @mcp.tool()
 async def search_guild(guild_id: str, content: str) -> dict:
-    response = await client.http.request(Route(
-        'GET',
-        '/guilds/{guild_id}/messages/search',
-        guild_id=guild_id,
-        content=content,
-    ))
+    route = Route('GET', '/guilds/{guild_id}/messages/search', guild_id=guild_id)
+    response = await client.http.request(route, params={
+        'content': content,
+    })
 
     return response
 
