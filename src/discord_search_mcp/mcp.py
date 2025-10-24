@@ -82,23 +82,27 @@ async def get_channel_messages(
     if not channel:
         raise ValueError(f'Channel {channel_id} not found')
 
+    if not isinstance(channel, discord.abc.Messageable):
+        raise ValueError(f'Channel {channel_id} is not a text channel')
+
     limit = max(1, min(100, limit))
 
-    kwargs = {'limit': limit}
     if direction == 'around' and message_id:
-        kwargs['around'] = discord.Object(id=int(message_id))
+        messages = [msg async for msg in channel.history(limit=limit, around=discord.Object(id=int(message_id)))]
     elif direction == 'before' and message_id:
-        kwargs['before'] = discord.Object(id=int(message_id))
+        messages = [msg async for msg in channel.history(limit=limit, before=discord.Object(id=int(message_id)))]
     elif direction == 'after' and message_id:
-        kwargs['after'] = discord.Object(id=int(message_id))
-    elif direction != 'latest':
+        messages = [msg async for msg in channel.history(limit=limit, after=discord.Object(id=int(message_id)))]
+    elif direction == 'latest':
+        messages = [msg async for msg in channel.history(limit=limit)]
+    else:
         raise ValueError(f"direction must be 'latest', 'around', 'before', or 'after'")
 
-    messages = [msg async for msg in channel.history(**kwargs)]
+    channel_name = getattr(channel, 'name', str(channel_id))
 
     return {
         'channel_id': channel_id,
-        'channel_name': channel.name,
+        'channel_name': channel_name,
         'message_count': len(messages),
         'messages': [
             {
