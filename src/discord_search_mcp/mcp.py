@@ -140,6 +140,92 @@ def get_guild_info(include_members: bool = False, include_channels: bool = True)
 
 
 @mcp.tool()
+async def get_active_threads(guild_id: str, limit: int = 10) -> dict:
+    """Get active threads in a guild.
+
+    Args:
+        guild_id: The guild to fetch active threads from
+        limit: Maximum number of threads to return (1-100, default 10)
+
+    Returns:
+        dict: List of active threads with essential details
+    """
+    client.ensure_ready()
+
+    limit = max(1, min(100, limit))
+
+    route = Route('GET', '/guilds/{guild_id}/threads/active', guild_id=guild_id)
+    response = await client.http.request(route)
+
+    threads = response.get('threads', [])
+    total_count = len(threads)
+
+    # Sort by message_count descending to get most active threads first
+    threads_sorted = sorted(threads, key=lambda t: t.get('message_count', 0), reverse=True)
+    threads_limited = threads_sorted[:limit]
+
+    return {
+        'guild_id': guild_id,
+        'total_active_threads': total_count,
+        'returned_count': len(threads_limited),
+        'note': f'Showing {len(threads_limited)} of {total_count} active threads (sorted by activity). Increase limit parameter to see more.',
+        'threads': [
+            {
+                'id': str(thread['id']),
+                'name': thread.get('name'),
+                'parent_channel_id': str(thread.get('parent_id')),
+                'message_count': thread.get('message_count', 0),
+                'member_count': thread.get('member_count', 0),
+            }
+            for thread in threads_limited
+        ]
+    }
+
+
+@mcp.tool()
+async def get_archived_threads(channel_id: str, public: bool = True, limit: int = 10) -> dict:
+    """Get archived threads from a channel.
+
+    Args:
+        channel_id: The channel to fetch archived threads from
+        public: Whether to fetch public (True) or private (False) archived threads
+        limit: Number of threads to fetch (2-100, default 10)
+
+    Returns:
+        dict: List of archived threads with essential details
+    """
+    client.ensure_ready()
+
+    limit = max(2, min(100, limit))
+    thread_type = 'public' if public else 'private'
+
+    route = Route('GET', f'/channels/{{channel_id}}/threads/archived/{thread_type}', channel_id=channel_id)
+    response = await client.http.request(route, params={'limit': limit})
+
+    threads = response.get('threads', [])
+    has_more = response.get('has_more', False)
+
+    return {
+        'channel_id': channel_id,
+        'thread_type': thread_type,
+        'thread_count': len(threads),
+        'has_more': has_more,
+        'threads': [
+            {
+                'id': str(thread['id']),
+                'name': thread.get('name'),
+                'parent_channel_id': str(thread.get('parent_id')),
+                'message_count': thread.get('message_count', 0),
+                'member_count': thread.get('member_count', 0),
+                'archive_timestamp': thread.get('thread_metadata', {}).get('archive_timestamp'),
+                'locked': thread.get('thread_metadata', {}).get('locked', False),
+            }
+            for thread in threads
+        ]
+    }
+
+
+@mcp.tool()
 async def search_guild(guild_id: str, content: str, limit: int = 10) -> dict:
     """Search for messages in a guild.
 
