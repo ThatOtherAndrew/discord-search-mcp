@@ -5,7 +5,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "aiohttp>=3.11.13",
     "discord-py>=2.6.4",
     "mcp>=1.19.0",
     "starlette>=0.48.0",

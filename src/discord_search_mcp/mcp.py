@@ -60,34 +60,54 @@ async def get_message_from_url(url: str) -> dict:
 
 
 @mcp.tool()
-async def get_attachment(url: str) -> dict:
-    """Get metadata about a Discord attachment.
+async def get_attachment(channel_id: str, message_id: str, filename: str) -> dict:
+    """Get a fresh URL for a Discord attachment.
 
-    NOTE: Attachment URLs are already included in message responses.
-    This tool just validates and returns metadata. For images, use the URL directly.
+    Discord attachment URLs expire after 24 hours. This tool re-fetches the message
+    to get a fresh, working URL for the attachment.
 
     Args:
-        url: Discord CDN URL for the attachment
+        channel_id: The channel ID containing the message
+        message_id: The message ID with the attachment
+        filename: The filename of the attachment to fetch
 
     Returns:
-        dict: Attachment metadata including URL, content type, and size
+        dict: Attachment metadata with fresh URL, content type, and size
     """
-    import aiohttp
+    client.ensure_ready()
 
-    if not url.startswith('https://cdn.discordapp.com/'):
-        raise ValueError('Only Discord CDN URLs are supported')
+    channel = client.get_channel(int(channel_id))
+    if not channel:
+        raise ValueError(f'Channel {channel_id} not found')
 
-    async with aiohttp.ClientSession() as session:
-        async with session.head(url) as response:
-            if response.status != 200:
-                raise ValueError(f'Failed to fetch attachment metadata: HTTP {response.status}')
+    if not isinstance(channel, discord.abc.Messageable):
+        raise ValueError(f'Channel {channel_id} is not a text channel')
 
-            return {
-                'url': url,
-                'content_type': response.headers.get('Content-Type', 'unknown'),
-                'size': int(response.headers.get('Content-Length', 0)),
-                'note': 'Use the URL directly to view images or download files',
-            }
+    try:
+        msg = await channel.fetch_message(int(message_id))
+    except discord.NotFound:
+        raise ValueError(f'Message {message_id} not found in channel {channel_id}')
+
+    # Find the attachment by filename
+    attachment = None
+    for att in msg.attachments:
+        if att.filename == filename:
+            attachment = att
+            break
+
+    if not attachment:
+        available = [att.filename for att in msg.attachments]
+        raise ValueError(f'Attachment "{filename}" not found. Available: {available}')
+
+    return {
+        'url': attachment.url,
+        'filename': attachment.filename,
+        'content_type': attachment.content_type,
+        'size': attachment.size,
+        'width': attachment.width if hasattr(attachment, 'width') else None,
+        'height': attachment.height if hasattr(attachment, 'height') else None,
+        'note': 'This is a fresh URL that should work for the next 24 hours. Use it directly to view/download.',
+    }
 
 
 @mcp.tool()
