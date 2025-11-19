@@ -249,13 +249,16 @@ async def get_archived_threads(channel_id: str, public: bool = True, limit: int 
 async def search_guild(guild_id: str, content: str, limit: int = 10) -> dict:
     """Search for messages in a guild.
 
+    Optimized for token efficiency with deduplicated authors/channels and sparse fields.
+    Use get_message() to retrieve full details for specific messages.
+
     Args:
         guild_id: The guild to search in
         content: Text to search for
         limit: Maximum results to return (1-25, default 10)
 
     Returns:
-        dict: Search results with message summaries
+        dict: Search results with message summaries, authors/channels lookup tables
     """
     client.ensure_ready()
 
@@ -267,23 +270,44 @@ async def search_guild(guild_id: str, content: str, limit: int = 10) -> dict:
         'limit': limit,
     })
 
-    # Simplify response structure
     messages = response.get('messages', [])
     total_results = response.get('total_results', 0)
 
+    # Build deduplicated lookup tables
+    authors = {}  # author_id -> {id, username}
+    channels = {}  # channel_id -> channel_id (for future expansion)
+
+    for msg in messages:
+        if msg and len(msg) > 0:
+            author_id = str(msg[0]['author']['id'])
+            if author_id not in authors:
+                authors[author_id] = {
+                    'id': author_id,
+                    'username': msg[0]['author'].get('username', 'Unknown'),
+                }
+
+            channel_id = str(msg[0]['channel_id'])
+            if channel_id not in channels:
+                channels[channel_id] = channel_id
+
+    # Convert to lists for indexing
+    author_list = list(authors.values())
+    channel_list = list(channels.keys())
+    author_id_to_idx = {a['id']: i for i, a in enumerate(author_list)}
+    channel_id_to_idx = {c: i for i, c in enumerate(channel_list)}
+
     return {
         'total_results': total_results,
-        'message_count': len(messages),
+        'message_count': len([m for m in messages if m and len(m) > 0]),
+        'authors': author_list,
+        'channels': channel_list,
         'messages': [
             {
                 'id': str(msg[0]['id']),
-                'channel_id': str(msg[0]['channel_id']),
+                'channel_idx': channel_id_to_idx[str(msg[0]['channel_id'])],
                 'content': msg[0]['content'][:200] + '...' if len(msg[0]['content']) > 200 else msg[0]['content'],
-                'author': {
-                    'id': str(msg[0]['author']['id']),
-                    'username': msg[0]['author'].get('username', 'Unknown'),
-                },
-                'timestamp': msg[0]['timestamp'],
+                'author_idx': author_id_to_idx[str(msg[0]['author']['id'])],
+                'ts': int(msg[0]['timestamp'].timestamp()) if hasattr(msg[0]['timestamp'], 'timestamp') else msg[0]['timestamp'],
             }
             for msg in messages
             if msg and len(msg) > 0
@@ -429,6 +453,9 @@ async def get_channel_messages(
 ) -> dict:
     """Get messages from a Discord channel.
 
+    Optimized for token efficiency with deduplicated authors and sparse fields.
+    Use get_message(channel_id, message_id) to retrieve full details for specific messages.
+
     Args:
         channel_id: The channel to fetch messages from
         message_id: Reference message ID (required for 'around', 'before', 'after')
@@ -436,7 +463,7 @@ async def get_channel_messages(
         limit: Number of messages to fetch (1-100, default 25)
 
     Returns:
-        dict: Channel info and message summaries
+        dict: Channel info, message summaries, and authors lookup table
     """
     client.ensure_ready()
 
@@ -462,65 +489,69 @@ async def get_channel_messages(
 
     channel_name = getattr(channel, 'name', str(channel_id))
 
+    # Build deduplicated author lookup table
+    authors = {}
+    for msg in messages:
+        author_id = str(msg.author.id)
+        if author_id not in authors:
+            authors[author_id] = {
+                'id': author_id,
+                'name': msg.author.display_name,
+            }
+
+    author_list = list(authors.values())
+    author_id_to_idx = {a['id']: i for i, a in enumerate(author_list)}
+
     return {
         'channel_id': channel_id,
         'channel_name': channel_name,
         'message_count': len(messages),
+        'authors': author_list,
         'messages': [
             {
                 'id': str(msg.id),
                 'content': msg.content[:300] + '...' if len(msg.content) > 300 else msg.content,
-                'author': {
-                    'id': str(msg.author.id),
-                    'display_name': msg.author.display_name,
-                },
-                'timestamp': msg.created_at.isoformat(),
-                'jump_url': msg.jump_url,
-
-                # Reply information (always included)
-                'reply_to': {
-                    'message_id': str(msg.reference.message_id),
-                    'channel_id': str(msg.reference.channel_id),
-                    'content_preview': msg.reference.resolved.content[:100] + '...' if msg.reference.resolved and isinstance(msg.reference.resolved, discord.Message) and len(msg.reference.resolved.content) > 100 else (msg.reference.resolved.content if msg.reference.resolved and isinstance(msg.reference.resolved, discord.Message) else None),
-                    'author': msg.reference.resolved.author.display_name if msg.reference.resolved and isinstance(msg.reference.resolved, discord.Message) else None,
-                } if msg.reference else None,
-
-                # Thread information
-                'thread': {
-                    'id': str(msg.thread.id),
-                    'name': msg.thread.name,
-                    'message_count': msg.thread.message_count,
-                    'member_count': msg.thread.member_count if hasattr(msg.thread, 'member_count') else None,
-                } if hasattr(msg, 'thread') and msg.thread else None,
-
-                # Forwarded messages (message snapshots) - Note: May not be available in all discord.py versions
-                'forwarded_count': len(getattr(msg, 'message_snapshots', [])),
-
-                # Embeds (always included with content)
-                'embeds': [
-                    {
-                        'type': embed.type,
-                        'title': embed.title,
-                        'description': (embed.description[:200] + '...' if embed.description and len(embed.description) > 200 else embed.description) if embed.description else None,
-                        'url': embed.url,
-                        'image': embed.image.url if embed.image else None,
-                        'thumbnail': embed.thumbnail.url if embed.thumbnail else None,
+                'author_idx': author_id_to_idx[str(msg.author.id)],
+                'ts': int(msg.created_at.timestamp()),
+                **({
+                    'reply_to': {
+                        'msg_id': str(msg.reference.message_id),
+                        'preview': msg.reference.resolved.content[:100] + '...' if msg.reference.resolved and isinstance(msg.reference.resolved, discord.Message) and len(msg.reference.resolved.content) > 100 else (msg.reference.resolved.content if msg.reference.resolved and isinstance(msg.reference.resolved, discord.Message) else None),
+                        'author': msg.reference.resolved.author.display_name if msg.reference.resolved and isinstance(msg.reference.resolved, discord.Message) else None,
                     }
-                    for embed in msg.embeds
-                ] if msg.embeds else [],
-
-                # Attachment metadata
-                'attachments': [
-                    {
-                        'filename': att.filename,
-                        'url': att.url,
-                        'content_type': att.content_type,
-                        'size': att.size,
+                } if msg.reference else {}),
+                **({
+                    'thread': {
+                        'id': str(msg.thread.id),
+                        'name': msg.thread.name,
+                        'msg_count': msg.thread.message_count,
                     }
-                    for att in msg.attachments
-                ] if msg.attachments else [],
-
-                'reaction_count': len(msg.reactions) if msg.reactions else 0,
+                } if hasattr(msg, 'thread') and msg.thread else {}),
+                **({'fwd_count': len(getattr(msg, 'message_snapshots', []))} if getattr(msg, 'message_snapshots', []) else {}),
+                **({
+                    'embeds': [
+                        {
+                            'type': embed.type,
+                            **({'title': embed.title} if embed.title else {}),
+                            **({'desc': embed.description[:200] + '...' if len(embed.description) > 200 else embed.description} if embed.description else {}),
+                            **({'url': embed.url} if embed.url else {}),
+                            **({'has_img': True} if embed.image or embed.thumbnail else {}),
+                        }
+                        for embed in msg.embeds
+                    ]
+                } if msg.embeds else {}),
+                **({
+                    'attachments': [
+                        {
+                            'file': att.filename,
+                            'url': att.url,
+                            'type': att.content_type,
+                            'size': att.size,
+                        }
+                        for att in msg.attachments
+                    ]
+                } if msg.attachments else {}),
+                **({'reactions': len(msg.reactions)} if msg.reactions else {}),
             }
             for msg in messages
         ]
