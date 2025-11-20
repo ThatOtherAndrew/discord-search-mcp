@@ -17,6 +17,37 @@ An MCP server for intelligently retrieving data from Discord servers via a bot a
 
 ## Setup Instructions
 
+### Running the MCP server
+
+Make sure you have [created a Discord bot](https://discord.com/developers/docs/quick-start/getting-started#step-1-creating-an-app), and set the `DISCORD_TOKEN` environment variable to your bot's token.
+
+If you have [`uv`](https://docs.astral.sh/uv/) installed, you can run the MCP server directly with `uvx`:
+
+```bash
+DISCORD_TOKEN="xxxxx" uvx git+https://github.com/ThatOtherAndrew/discord-search-mcp
+```
+
+To install `discord-search-mcp` locally instead, use one of the following commands:
+
+```bash
+# Using pip
+pip install git+https://github.com/ThatOtherAndrew/discord-search-mcp
+
+# Using uv
+uv tool install git+https://github.com/ThatOtherAndrew/discord-search-mcp
+```
+
+Then, run the MCP server with:
+
+```bash
+# Remember to set the DISCORD_TOKEN environment variable!
+discord-search-mcp
+```
+
+### Configuring your MCP client
+
+#### Claude Code
+
 TODO
 
 ## Development
