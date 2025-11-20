@@ -1,12 +1,23 @@
 [project]
 name = "discord-search-mcp"
 version = "0.1.0"
-description = "Add your description here"
+description = "An MCP server for intelligently retrieving data from Discord servers via a bot account."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
     "discord-py>=2.6.4",
     "mcp>=1.19.0",
     "starlette>=0.48.0",
     "uvicorn>=0.38.0",
 ]
+
+[dependency-groups]
+dev = [
+    "mcp[cli]>=1.19.0",
+]
+
+[project.scripts]
+discord-search-mcp = "discord_search_mcp.__main__:run_module"
+
+[tool.uv]
+package = true

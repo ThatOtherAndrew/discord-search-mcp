@@ -5,6 +5,7 @@ import asyncio
 import os
 import re
 import sys
+from contextlib import asynccontextmanager, suppress
 
 import discord
 import uvicorn
@@ -12,7 +13,26 @@ from mcp.server.fastmcp import FastMCP
 
 
 client = Client()
-mcp = FastMCP('discord-search-mcp')
+
+
+@asynccontextmanager
+async def lifespan(app):
+    """Start Discord client on startup."""
+    token = os.getenv('DISCORD_TOKEN')
+    if not token:
+        raise RuntimeError('DISCORD_TOKEN environment variable not set')
+
+    print('Starting Discord client...')
+    await client.start(token)
+    print('Discord client ready!')
+
+    yield
+
+    print('Shutting down Discord client...')
+    await client.close()
+
+
+mcp = FastMCP('discord-search-mcp', lifespan=lifespan)
 
 
 def parse_discord_url(url: str) -> dict | None:
@@ -558,10 +578,7 @@ async def get_channel_messages(
     }
 
 
-async def run_server(token: str):
-    print('Starting Discord MCP server...')
-    await client.start(token)
-
+async def run_server():
     port = int(os.getenv('PORT', 8000))
     print(f'Starting MCP server on http://127.0.0.1:{port}')
 
@@ -571,12 +588,8 @@ async def run_server(token: str):
 
 
 def main():
-    token = os.getenv('DISCORD_TOKEN')
-    if not token:
-        print('Error: DISCORD_TOKEN environment variable not set', file=sys.stderr)
-        sys.exit(1)
-    else:
-        asyncio.run(run_server(token))
+    with suppress(KeyboardInterrupt):
+        asyncio.run(run_server())
 
 
 if __name__ == '__main__':
