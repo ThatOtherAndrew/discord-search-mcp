@@ -44,11 +44,29 @@ Then, run the MCP server with:
 discord-search-mcp
 ```
 
+The default port number is `8000`. You can override this by passing the `PORT` environment variable:
+
+```bash
+PORT=1234 discord-search-mcp
+# or
+DISCORD_TOKEN="xxxxx" PORT=1234 uvx git+https://github.com/ThatOtherAndrew/discord-search-mcp
+```
+
 ### Configuring your MCP client
 
 #### Claude Code
 
-TODO
+Use the following command to add the MCP server to your Claude Code user configuration:
+
+```bash
+claude mcp add -s user -t http discord-search http://{DOMAIN}:{PORT}/mcp
+```
+
+For instance, if you are running the MCP server locally, and using the default port `8000`, the command would be:
+
+```bash
+claude mcp add -s user -t http discord-search http://127.0.0.1:8000/mcp
+```
 
 ## Development
 
